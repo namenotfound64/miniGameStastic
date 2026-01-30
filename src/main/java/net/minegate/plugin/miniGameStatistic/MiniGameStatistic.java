@@ -13,6 +13,12 @@ import net.minegate.plugin.miniGameStatistic.model.GameStatistic;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import eu.decentsoftware.holograms.api.DHAPI;
+import eu.decentsoftware.holograms.api.holograms.Hologram;
+import org.bukkit.Location;
+import java.util.Arrays;
+import java.util.List;
+
 
 public final class MiniGameStatistic extends JavaPlugin {
 
@@ -205,16 +211,35 @@ public final class MiniGameStatistic extends JavaPlugin {
     /**
      * Broadcast game statistics to all players in lobby
      */
+    private Location getHologramLocation() {
+        String worldName = getConfig().getString("hologram-location.world", "world");
+        double x = getConfig().getDouble("hologram-location.x");
+        double y = getConfig().getDouble("hologram-location.y");
+        double z = getConfig().getDouble("hologram-location.z");
+        return new Location(Bukkit.getWorld(worldName), x, y, z);
+    }
+
     private void broadcastStatistics(GameStatistic statistic) {
-        String message = String.format(
-            "§6§l[Game Stats] §e%s §7ended! §aWinner: §f%s §7| §aPlayers: §f%d",
-            statistic.getGameName(),
-            statistic.getWinner(),
-            statistic.getPlayerCount()
+        Location spawnLocation = getHologramLocation();
+
+        List<String> lines = Arrays.asList(
+                "§6§l★ 游戏结束统计 ★",
+                "§e游戏服务器: §f" + statistic.getGameName(),
+                "§a获胜者: §f" + statistic.getWinner(),
+                "§b在线人数: §f" + statistic.getPlayerCount(),
+                "§7(本提示将在 15 秒后消失)"
         );
-        
-        Bukkit.broadcastMessage(message);
-        getLogger().info("Broadcasted statistics: " + message);
+
+        String holoName = "stats_" + System.currentTimeMillis();
+        Hologram hologram = DHAPI.createHologram(holoName, spawnLocation, lines);
+
+        Bukkit.broadcastMessage("§6§l[Game Stats] §e小游戏已结束！统计信息已在大厅出生点上方显示。");
+
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (hologram != null) {
+                hologram.delete();
+            }
+        }, 15 * 20L); // 15秒 * 20刻
     }
 
     /**
