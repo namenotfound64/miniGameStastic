@@ -1,0 +1,19 @@
+name: MiniGameStatistic
+version: '1.0-SNAPSHOT'
+main: net.minegate.plugin.miniGameStatistic.MiniGameStatistic
+api-version: '1.20'
+description: 'CloudNet v4 plugin for minigame statistics and automatic player teleportation'
+author: 'MineGate'
+
+commands:
+  gameend:
+    description: 'Manually trigger game end event'
+    usage: '/gameend <winner> [playerCount]'
+    permission: minigamestatistic.gameend
+    permission-message: 'You do not have permission to use this command'
+
+permissions:
+  minigamestatistic.gameend:
+    description: 'Allows triggering manual game end'
+    default: op
+

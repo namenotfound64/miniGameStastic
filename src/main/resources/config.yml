@@ -1,0 +1,18 @@
+# MiniGameStatistic Configuration
+
+# Plugin mode: "LOBBY" or "GAME"
+# LOBBY mode: Listens for statistics from game servers and broadcasts them
+# GAME mode: Sends statistics to lobby server after game ends
+mode: GAME
+
+# Lobby server name (used in GAME mode to send statistics)
+lobby-server: "Lobby-1"
+
+# Proxy service name (used to execute send commands for player teleportation)
+proxy-service: "Proxy-1"
+
+# Delay in seconds before teleporting players back to lobby after game ends
+teleport-delay: 5
+
+# Game server name (used in GAME mode, auto-detected if not set)
+game-server-name: "auto"
