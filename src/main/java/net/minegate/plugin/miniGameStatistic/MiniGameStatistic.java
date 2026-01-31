@@ -148,18 +148,18 @@ public final class MiniGameStatistic extends JavaPlugin {
         try {
             getLogger().info("Sending statistics to lobby server: " + statistic);
 
-            var builder = ChannelMessage.builder()
+            ChannelMessage.builder()
                     .channel("minigame_statistics")
                     .message("game_end")
-                    .targetService(lobbyServer);
-            
-            var buffer = builder.buffer();
-            buffer.writeString(statistic.getGameName());
-            buffer.writeString(statistic.getWinner());
-            buffer.writeInt(statistic.getPlayerCount());
-            buffer.writeLong(statistic.getTimestamp());
-            
-            builder.build().send();
+                    .buffer()
+                        .writeString(statistic.getGameName())
+                        .writeString(statistic.getWinner())
+                        .writeInt(statistic.getPlayerCount())
+                        .writeLong(statistic.getTimestamp())
+                    .build()
+                    .targetService(lobbyServer)
+                    .build()
+                    .send();
 
             getLogger().info("Statistics sent successfully to " + lobbyServer);
         } catch (Exception e) {
