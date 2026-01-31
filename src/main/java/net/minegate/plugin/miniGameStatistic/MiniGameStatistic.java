@@ -16,6 +16,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import eu.decentsoftware.holograms.api.DHAPI;
 import eu.decentsoftware.holograms.api.holograms.Hologram;
 import org.bukkit.Location;
+import eu.decentsoftware.holograms.api.DecentHologramsAPI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -219,27 +221,54 @@ public final class MiniGameStatistic extends JavaPlugin {
         return new Location(Bukkit.getWorld(worldName), x, y, z);
     }
 
+    private void clearOldHolograms() {
+        // 使用 DecentHolograms API 获取全息图列表
+        // 注意：DHAPI.getHologramManager().getHolograms()
+        // 建议将其放入一个新列表中遍历，防止并发修改异常
+        new ArrayList<>(DecentHologramsAPI.get().getHologramManager().getHolograms()).forEach(holo -> {
+            if (holo.getName().startsWith("stats_")) {
+                holo.delete();
+            }
+        });
+    }
+
     private void broadcastStatistics(GameStatistic statistic) {
+        // 1. 先清理
+        clearOldHolograms();
+
+        int duration = getConfig().getInt("hologram-duration", 15);
         Location spawnLocation = getHologramLocation();
 
-        List<String> lines = Arrays.asList(
-                "§6§l★ 游戏结束统计 ★",
-                "§e游戏服务器: §f" + statistic.getGameName(),
-                "§a获胜者: §f" + statistic.getWinner(),
-                "§b在线人数: §f" + statistic.getPlayerCount(),
-                "§7(本提示将在 15 秒后消失)"
-        );
+        // 2. 使用 ArrayList (可变列表)
+        List<String> lines = new ArrayList<>();
+        lines.add("§6§l★ 游戏结束统计 ★");
+        lines.add("§e游戏服务器: §f" + statistic.getGameName());
+        lines.add("§a获胜者: §f" + statistic.getWinner());
+        lines.add("§b在线人数: §f" + statistic.getPlayerCount());
 
+        // 3. 根据 duration 动态添加最后一行提示
+        if (duration > 0) {
+            lines.add("§7(本提示将在 " + duration + " 秒后自动刷新)");
+        } else {
+            lines.add("§7(本提示将保留至下一场比赛)");
+        }
+
+        // 4. 创建全息图 (此时 lines 已经包含了所有信息)
         String holoName = "stats_" + System.currentTimeMillis();
         Hologram hologram = DHAPI.createHologram(holoName, spawnLocation, lines);
 
-        Bukkit.broadcastMessage("§6§l[Game Stats] §e小游戏已结束！统计信息已在大厅出生点上方显示。");
+        Bukkit.broadcastMessage("§6§l[Game Stats] §e小游戏已结束！统计信息已在大厅显示。");
 
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (hologram != null) {
-                hologram.delete();
-            }
-        }, 15 * 20L); // 15秒 * 20刻
+        // 5. 处理自动删除逻辑
+        if (duration > 0) {
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (DHAPI.getHologram(holoName) != null) {
+                    DHAPI.removeHologram(holoName);
+                    getLogger().info("已删除过期的统计全息图: " + holoName);
+                }
+            }, duration * 20L);
+        }
+
     }
 
     /**
