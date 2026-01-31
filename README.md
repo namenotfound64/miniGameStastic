@@ -15,8 +15,8 @@ A Minecraft Paper plugin (version 1.20.1) for CloudNet v4 that automatically tel
 - **Maven**: Uses Maven for dependency management (`pom.xml`)
 - **Dependencies**: 
   - Paper API (1.20.1)
-  - CloudNet Driver (4.0.0-RC10)
-  - CloudNet Bridge (4.0.0-RC10)
+  - CloudNet Driver (4.0.0-RC16)
+  - CloudNet Bridge (4.0.0-RC16)
 - **Configuration**: `config.yml` to toggle between "Lobby" and "Game" modes
 - **CloudNetAPI**: Utility class for CloudNet service interaction (based on TalexCK/GameVoting)
 - **Main Plugin**: Event handling and message passing
@@ -100,7 +100,7 @@ Uses CloudNet's `ChannelMessage` system on the `minigame_statistics` channel to 
 
 - **Minecraft**: 1.20.1+
 - **Java**: 17+
-- **CloudNet**: 4.0.0-RC10+
+- **CloudNet**: 4.0.0-RC16+
 - **Platform**: Paper/Spigot running on CloudNet
 
 ## License

@@ -149,7 +149,7 @@ ChannelMessage.builder()
 
 ### CloudNet API errors
 - Make sure the plugin is running on a CloudNet service
-- Verify CloudNet version is 4.0.0-RC10 or higher
+- Verify CloudNet version is 4.0.0-RC16 or higher
 - Check that CloudNet Driver and Bridge modules are available
 
 ## Example Minigame Integration
