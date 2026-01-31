@@ -45,14 +45,14 @@
         <dependency>
             <groupId>eu.cloudnetservice.cloudnet</groupId>
             <artifactId>driver</artifactId>
-            <version>4.0.0-RC16</version>
+            <version>4.0.0-RC10</version>
             <scope>provided</scope>
         </dependency>
         <!-- CloudNet Bridge (用于玩家传送) -->
         <dependency>
             <groupId>eu.cloudnetservice.cloudnet</groupId>
             <artifactId>bridge</artifactId>
-            <version>4.0.0-RC16</version>
+            <version>4.0.0-RC10</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
