@@ -156,7 +156,6 @@ public final class MiniGameStatistic extends JavaPlugin {
                         .writeString(statistic.getWinner())
                         .writeInt(statistic.getPlayerCount())
                         .writeLong(statistic.getTimestamp())
-                    .build()
                     .targetService(lobbyServer)
                     .build()
                     .send();
