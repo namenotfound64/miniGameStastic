@@ -148,15 +148,17 @@ public final class MiniGameStatistic extends JavaPlugin {
         try {
             getLogger().info("Sending statistics to lobby server: " + statistic);
 
+            // 导入需要：eu.cloudnetservice.driver.network.buffer.DataBuf
+            eu.cloudnetservice.driver.network.buffer.DataBuf data = eu.cloudnetservice.driver.network.buffer.DataBuf.empty()
+                    .writeString(statistic.getGameName())
+                    .writeString(statistic.getWinner())
+                    .writeInt(statistic.getPlayerCount())
+                    .writeLong(statistic.getTimestamp());
+
             ChannelMessage.builder()
                     .channel("minigame_statistics")
                     .message("game_end")
-                    .buffer()
-                        .writeString(statistic.getGameName())
-                        .writeString(statistic.getWinner())
-                        .writeInt(statistic.getPlayerCount())
-                        .writeLong(statistic.getTimestamp())
-                    .build()
+                    .buffer(data) // 使用 buffer() 传入构造好的 DataBuf
                     .targetService(lobbyServer)
                     .build()
                     .send();
