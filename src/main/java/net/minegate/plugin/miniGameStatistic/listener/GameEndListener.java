@@ -1,9 +1,7 @@
 package net.minegate.plugin.miniGameStatistic.listener;
 
 import net.minegate.plugin.miniGameStatistic.MiniGameStatistic;
-import net.minegate.plugin.miniGameStatistic.model.GameStatistic;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;

@@ -5,7 +5,6 @@ import eu.cloudnetservice.driver.provider.CloudServiceProvider;
 import eu.cloudnetservice.driver.service.ServiceInfoSnapshot;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * CloudNet v4 API Wrapper using Driver API
@@ -46,17 +45,12 @@ public class CloudNetAPI {
     /**
      * Execute a command on a specific service.
      * Used for sending players to other servers via proxy command.
-     * 
+     *
      * @param serviceName The name of the service
      * @param command The command to execute
      */
     public void executeServiceCommand(String serviceName, String command) {
-        Optional<ServiceInfoSnapshot> serviceOpt = getServiceByName(serviceName);
-        if (serviceOpt.isEmpty()) {
-            throw new IllegalArgumentException("Service not found: " + serviceName);
-        }
-        
-        UUID serviceId = serviceOpt.get().serviceId().uniqueId();
-        serviceProvider.serviceProvider(serviceId).runCommand(command);
+        // RC16: use serviceProviderByName directly (no-op if service doesn't exist)
+        serviceProvider.serviceProviderByName(serviceName).runCommand(command);
     }
 }

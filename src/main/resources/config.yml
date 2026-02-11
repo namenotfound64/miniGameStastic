@@ -1,7 +1,7 @@
 # MiniGameStatistic Configuration
 
 # Plugin mode: "LOBBY" or "GAME"
-# LOBBY mode: Listens for statistics from game servers and broadcasts them
+# LOBBY mode: Listens for statistics from game servers, saves to database, and shows holograms
 # GAME mode: Sends statistics to lobby server after game ends
 mode: GAME
 
@@ -14,5 +14,41 @@ proxy-service: "Proxy-1"
 # Delay in seconds before teleporting players back to lobby after game ends
 teleport-delay: 5
 
-# Game server name (used in GAME mode, auto-detected if not set)
+# Game server name (used in GAME mode, auto-detected if "auto")
 game-server-name: "auto"
+
+# ===== Database Configuration (used in LOBBY mode) =====
+database:
+  enabled: false
+  # Supported types: postgresql (recommended), mysql, mariadb, mongodb
+  type: "postgresql"
+  host: "localhost"
+  port: 5432
+  database: "minigame_stats"
+  username: "postgres"
+  password: "password"
+
+# ===== Hologram Configuration (used in LOBBY mode) =====
+# Duration in seconds for the hologram to stay visible (0 = until next game)
+hologram-duration: 30
+
+# Multiple hologram locations (add as many as you need)
+hologram-locations:
+  - world: "world"
+    x: 0.5
+    y: 65.0
+    z: 0.5
+
+# Hologram display format - you can customize which lines appear
+# Available placeholders:
+#   {game_name}, {winner}, {player_count}, {match_id}, {duration}
+#   Per-player lines use {player_name}, {kills}, {deaths}, {assists}, {score}
+hologram-header:
+  - "&6&l\u2605 Game Over \u2605"
+  - "&eServer: &f{game_name}"
+  - "&aWinner: &f{winner}"
+  - "&bPlayers: &f{player_count}"
+  - "&7------- Player Stats -------"
+hologram-player-line: "&f{player_name}  &cK:{kills} &4D:{deaths} &eA:{assists} &bS:{score}"
+hologram-footer:
+  - "&7----------------------------"

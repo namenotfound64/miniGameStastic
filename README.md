@@ -1,68 +1,170 @@
 # MiniGameStatistic Plugin
 
-A Minecraft Paper plugin (version 1.20.1) for CloudNet v4 that automatically teleports players to a lobby server after a minigame ends and tracks game statistics.
+A Minecraft Paper plugin for **CloudNet v4** (RC16) that:
 
-## Features
+1. **Teleports players** back to the lobby server when a minigame ends (via command or API)
+2. **Persists match data** (winner, player count, per-player kills/deaths/assists/score) to a database (PostgreSQL / MySQL / MariaDB / MongoDB)
+3. **Displays a hologram** on the lobby server showing the last match's statistics using DecentHolograms
 
-1. **Automatic Teleportation**: When a minigame ends, teleport all players back to the lobby server (default "Lobby-1") after a configurable delay (default 5 seconds). Uses CloudNet v4 API by executing a "send" command on the proxy service.
+---
 
-2. **Statistics Tracking**: Collects game data (winner, player count) and sends it to the lobby server using CloudNet's `ChannelMessage`.
+## Requirements
 
-3. **Lobby Display**: On the lobby server, listens for these messages and broadcasts the statistics to all players.
+| Component | Version |
+|---|---|
+| Minecraft Server | Paper 1.20.6+ |
+| Java | 21+ |
+| CloudNet | 4.0.0-RC16 |
+| DecentHolograms | 2.8.6+ |
+| Database (optional) | PostgreSQL 12+ / MySQL 8.0+ / MariaDB 10.5+ / MongoDB 5.0+ |
 
 ## Project Structure
 
-- **Maven**: Uses Maven for dependency management (`pom.xml`)
-- **Dependencies**: 
-  - Paper API (1.20.1)
-  - CloudNet Driver (4.0.0-RC10)
-  - CloudNet Bridge (4.0.0-RC10)
-- **Configuration**: `config.yml` to toggle between "Lobby" and "Game" modes
-- **CloudNetAPI**: Utility class for CloudNet service interaction (based on TalexCK/GameVoting)
-- **Main Plugin**: Event handling and message passing
+```
+src/main/java/net/minegate/plugin/miniGameStatistic/
+  MiniGameStatistic.java          # Main plugin class (GAME & LOBBY modes)
+  api/
+    CloudNetAPI.java              # CloudNet v4 Driver API wrapper
+    GameEndAPI.java               # Public API for external plugins to trigger game end
+  command/
+    GameEndCommand.java           # /gameend command executor
+  database/
+    GameStatisticRepository.java  # Repository interface
+    SqlRepository.java            # PostgreSQL / MySQL / MariaDB implementation
+    MongoRepository.java          # MongoDB implementation
+    DatabaseManager.java          # Factory & singleton holder
+  listener/
+    GameEndListener.java          # Bukkit event listener (example)
+  model/
+    GameStatistic.java            # Match-level data model
+    PlayerMatchStatistic.java     # Per-player data model
+```
 
-## Configuration
-
-Edit `config.yml` to configure the plugin:
+## Configuration (`config.yml`)
 
 ```yaml
-# Plugin mode: "LOBBY" or "GAME"
-mode: GAME
-
-# Lobby server name (used in GAME mode to send statistics)
+mode: GAME                    # GAME or LOBBY
 lobby-server: "Lobby-1"
-
-# Proxy service name (used to execute send commands)
 proxy-service: "Proxy-1"
-
-# Delay in seconds before teleporting players
 teleport-delay: 5
+game-server-name: "auto"      # auto-detect from CloudNet
 
-# Game server name (auto-detected if not set)
-game-server-name: "auto"
+# Database (LOBBY mode only)
+database:
+  enabled: true
+  type: "postgresql"           # postgresql | mysql | mariadb | mongodb
+  host: "localhost"
+  port: 5432
+  database: "minigame_stats"
+  username: "postgres"
+  password: "password"
+
+# Hologram (LOBBY mode only)
+hologram-duration: 30          # seconds, 0 = permanent until next game
+hologram-locations:
+  - world: "world"
+    x: 0.5
+    y: 65.0
+    z: 0.5
+
+hologram-header:
+  - "&6&l★ Game Over ★"
+  - "&eServer: &f{game_name}"
+  - "&aWinner: &f{winner}"
+  - "&bPlayers: &f{player_count}"
+  - "&7------- Player Stats -------"
+hologram-player-line: "&f{player_name}  &cK:{kills} &4D:{deaths} &eA:{assists} &bS:{score}"
+hologram-footer:
+  - "&7----------------------------"
 ```
 
 ## Usage
 
-### Game Server Mode
+### 1. Game End Command
 
-1. Set `mode: GAME` in `config.yml`
-2. When your minigame ends, call the game end handler:
-
-```java
-MiniGameStatistic plugin = (MiniGameStatistic) Bukkit.getPluginManager().getPlugin("MiniGameStatistic");
-plugin.handleGameEnd("PlayerName", 10); // Winner name and player count
+```
+/gameend <winner> [playerCount] [player:uuid:kills:deaths:assists:score ...]
 ```
 
-This will:
-- Send statistics to the lobby server via CloudNet ChannelMessage
-- After 5 seconds (configurable), teleport all players to the lobby
+**Examples:**
 
-### Lobby Server Mode
+```
+/gameend Steve
+/gameend Steve 8
+/gameend Steve 2 Steve:uuid1:5:2:3:100 Alex:uuid2:3:4:1:60
+```
 
-1. Set `mode: LOBBY` in `config.yml`
-2. The plugin will automatically listen for statistics messages
-3. When statistics are received, they will be broadcast to all players in the lobby
+Permission: `minigamestatistic.gameend` (default: op)
+
+### 2. Java API (for other plugins)
+
+```java
+import net.minegate.plugin.miniGameStatistic.api.GameEndAPI;
+import net.minegate.plugin.miniGameStatistic.model.PlayerMatchStatistic;
+
+// Simple (no per-player stats):
+GameEndAPI.endGame("Steve", 8);
+
+// With per-player stats:
+List<PlayerMatchStatistic> stats = List.of(
+    new PlayerMatchStatistic("Steve", uuid, 5, 2, 3, 100),
+    new PlayerMatchStatistic("Alex",  uuid, 3, 4, 1, 60)
+);
+GameEndAPI.endGame("Steve", 8, stats);
+```
+
+### 3. What Happens When Game Ends
+
+On the **GAME** server:
+1. Statistics are sent to the lobby server via CloudNet `ChannelMessage`
+2. After `teleport-delay` seconds, all online players are sent to `lobby-server`
+
+On the **LOBBY** server:
+1. Statistics are received and saved to the configured database (if enabled)
+2. DecentHolograms are created at all configured locations showing match results
+3. A chat broadcast notifies all lobby players
+
+## Database Schema
+
+### SQL (PostgreSQL / MySQL)
+
+```sql
+CREATE TABLE game_statistics (
+    match_id VARCHAR(64) PRIMARY KEY,
+    game_name VARCHAR(128) NOT NULL,
+    winner VARCHAR(64),
+    player_count INT NOT NULL,
+    timestamp BIGINT NOT NULL
+);
+
+CREATE TABLE player_match_statistics (
+    id SERIAL PRIMARY KEY,
+    match_id VARCHAR(64) NOT NULL,
+    player_name VARCHAR(64) NOT NULL,
+    player_uuid VARCHAR(64),
+    kills INT NOT NULL DEFAULT 0,
+    deaths INT NOT NULL DEFAULT 0,
+    assists INT NOT NULL DEFAULT 0,
+    score INT NOT NULL DEFAULT 0
+);
+```
+
+### MongoDB
+
+Collection: `game_statistics`
+
+```json
+{
+    "match_id": "uuid",
+    "game_name": "SkyWars-1",
+    "winner": "Steve",
+    "player_count": 8,
+    "timestamp": 1234567890,
+    "players": [
+        { "player_name": "Steve", "player_uuid": "...", "kills": 5, "deaths": 2, "assists": 3, "score": 100 }
+    ]
+}
+```
 
 ## Building
 
@@ -70,38 +172,41 @@ This will:
 mvn clean package
 ```
 
-The compiled JAR will be in `target/MiniGamePlugin-1.0-SNAPSHOT.jar`
+Output: `target/MiniGamePlugin-1.0-SNAPSHOT.jar`
 
-**Note**: This plugin must be run in a CloudNet v4 environment. The Paper API and CloudNet dependencies are provided at runtime by the server.
+## Running Unit Tests
+
+```bash
+# Run all tests
+mvn test
+
+# Run only model tests
+mvn test -Dtest="net.minegate.plugin.miniGameStatistic.model.*"
+
+# Run only command tests
+mvn test -Dtest="net.minegate.plugin.miniGameStatistic.command.*"
+
+# Run only database tests
+mvn test -Dtest="net.minegate.plugin.miniGameStatistic.database.*"
+
+# Run a single test class
+mvn test -Dtest="GameStatisticTest"
+
+# Run with verbose output
+mvn test -X
+```
 
 ## Installation
 
-1. Place the JAR file in the `plugins/` directory of your CloudNet service
-2. Configure `config.yml` with appropriate mode and server names
-3. Restart the service
+1. Build the JAR: `mvn clean package`
+2. Copy `target/MiniGamePlugin-1.0-SNAPSHOT.jar` to the `plugins/` folder
+3. Install DecentHolograms on the lobby server
+4. Configure `config.yml` (set mode, server names, database, hologram locations)
+5. Restart the server
 
-## Implementation Details
+## CloudNet API Reference
 
-### CloudNetAPI
-
-The `CloudNetAPI` class provides a wrapper around CloudNet v4 Driver API, based on the implementation from [TalexCK/GameVoting](https://github.com/TalexCK/GameVoting). It handles:
-- Service management
-- Command execution for player teleportation
-
-### Player Teleportation
-
-Uses the CloudNet proxy service to execute `send <player> <server>` commands, similar to BungeeCord's player sending mechanism.
-
-### Statistics Messaging
-
-Uses CloudNet's `ChannelMessage` system on the `minigame_statistics` channel to send game end data from game servers to lobby servers.
-
-## Requirements
-
-- **Minecraft**: 1.20.1+
-- **Java**: 17+
-- **CloudNet**: 4.0.0-RC10+
-- **Platform**: Paper/Spigot running on CloudNet
+Based on [TalexCK/GameVoting](https://github.com/TalexCK/GameVoting) implementation patterns.
 
 ## License
 
