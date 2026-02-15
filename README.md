@@ -2,7 +2,7 @@
 
 A Minecraft Paper plugin for **CloudNet v4** (RC16) that:
 
-1. **Auto-collects player stats** from vanilla Minecraft scoreboards (kills, deaths, assists, score)
+1. **Auto-collects player stats** from vanilla Minecraft scoreboards with **fully dynamic fields** — configure any number of stat fields (kills, deaths, damage, heals, blocks, etc.)
 2. **Teleports players** back to the lobby server when a minigame ends (via command or API)
 3. **Persists match data** to a database (PostgreSQL / MySQL / MariaDB / MongoDB)
 4. **Displays a hologram** on the lobby server showing the last match's player statistics using DecentHolograms
@@ -33,14 +33,14 @@ src/main/java/net/minegate/plugin/miniGameStatistic/
     SaveScoreboardCommand.java      # /savescoreboard command — snapshot per round
   database/
     GameStatisticRepository.java    # Repository interface
-    SqlRepository.java             # PostgreSQL / MySQL / MariaDB implementation
-    MongoRepository.java           # MongoDB implementation
+    SqlRepository.java             # PostgreSQL / MySQL / MariaDB implementation (EAV schema)
+    MongoRepository.java           # MongoDB implementation (nested document)
     DatabaseManager.java           # Factory & singleton holder
   listener/
     GameEndListener.java           # Bukkit event listener (example)
   model/
     GameStatistic.java             # Match-level data model
-    PlayerMatchStatistic.java      # Per-player data model
+    PlayerMatchStatistic.java      # Per-player data model (dynamic Map<String,Integer>)
   scoreboard/
     ScoreboardTracker.java         # Reads vanilla scoreboards, SUM/MAX merge across rounds
 ```
@@ -58,11 +58,17 @@ game-server-name: "auto"      # auto-detect from CloudNet
 scoreboard:
   enabled: true
   merge-mode: "SUM"           # SUM = add across rounds, MAX = keep highest per field
+  sort-by: "score"            # which field to sort players by in hologram (optional)
+  # Add ANY number of fields — each maps to a vanilla scoreboard objective
   objectives:
-    kills: "game_kills"       # vanilla scoreboard objective names
+    kills: "game_kills"
     deaths: "game_deaths"
     assists: "game_assists"
     score: "game_score"
+    # Examples of additional fields:
+    # damage: "game_damage"
+    # heals: "game_heals"
+    # blocks_placed: "game_blocks"
 
 # ===== Database (LOBBY mode) =====
 database:
@@ -82,6 +88,8 @@ hologram-locations:
     y: 65.0
     z: 0.5
 
+# Placeholders: {game_name}, {winner}, {player_count}, {match_id}, {duration}
+# Per-player line: {player_name} and any field name from objectives: {kills}, {damage}, etc.
 hologram-header:
   - "&6&l★ Game Over ★"
   - "&eServer: &f{game_name}"
@@ -92,6 +100,30 @@ hologram-player-line: "&f{player_name}  &cK:{kills} &4D:{deaths} &eA:{assists} &
 hologram-footer:
   - "&7----------------------------"
 ```
+
+## Dynamic Fields
+
+The stat field system is fully dynamic. You are **not limited** to kills/deaths/assists/score — add any fields you need:
+
+```yaml
+objectives:
+  kills: "game_kills"
+  deaths: "game_deaths"
+  damage_dealt: "game_damage"
+  damage_taken: "game_damage_taken"
+  heals: "game_heals"
+  blocks_placed: "game_blocks"
+  distance_walked: "game_distance"
+```
+
+All fields are automatically:
+- **Tracked** from vanilla scoreboard objectives
+- **Merged** across rounds (SUM or MAX)
+- **Serialized** via CloudNet ChannelMessage
+- **Stored** in the database (SQL uses EAV schema, MongoDB uses nested documents)
+- **Displayed** in holograms via `{field_name}` placeholders
+
+No code changes or schema migrations needed — just edit `config.yml` and restart.
 
 ## Commands
 
@@ -109,8 +141,7 @@ Your minigame creates vanilla scoreboard objectives (e.g. via command blocks or 
 ```
 /scoreboard objectives add game_kills dummy
 /scoreboard objectives add game_deaths dummy
-/scoreboard objectives add game_assists dummy
-/scoreboard objectives add game_score dummy
+/scoreboard objectives add game_damage dummy
 ```
 
 The plugin reads these objectives automatically. You just need to configure the objective names in `config.yml`.
@@ -130,9 +161,15 @@ Round 2 ends → /savescoreboard          (merges round 2 via SUM or MAX)
 Round 3 ends → /gameend Steve           (final snapshot + send + teleport + clear)
 ```
 
-### Manual Stats (Alternative)
+### Manual Stats via Command
 
-You can still pass stats manually on the command line:
+You can pass stats manually using key=value format:
+
+```
+/gameend Steve 2 Steve:uuid1:kills=5:deaths=2:damage=300 Alex:uuid2:kills=3:deaths=4:damage=150
+```
+
+Legacy positional format is also supported for backward compatibility:
 
 ```
 /gameend Steve 2 Steve:uuid1:5:2:3:100 Alex:uuid2:3:4:1:60
@@ -149,12 +186,15 @@ import net.minegate.plugin.miniGameStatistic.model.PlayerMatchStatistic;
 // Simple — scoreboard data is auto-attached:
 GameEndAPI.endGame("Steve", 8);
 
-// With explicit per-player stats:
+// With dynamic per-player stats:
 List<PlayerMatchStatistic> stats = List.of(
-    new PlayerMatchStatistic("Steve", uuid, 5, 2, 3, 100),
-    new PlayerMatchStatistic("Alex",  uuid, 3, 4, 1, 60)
+    new PlayerMatchStatistic("Steve", uuid, Map.of("kills", 5, "deaths", 2, "damage", 300)),
+    new PlayerMatchStatistic("Alex",  uuid, Map.of("kills", 3, "deaths", 4, "damage", 150))
 );
 GameEndAPI.endGame("Steve", 8, stats);
+
+// Legacy 4-field constructor still works:
+new PlayerMatchStatistic("Steve", uuid, 5, 2, 3, 100);
 ```
 
 ### What Happens When Game Ends
@@ -177,11 +217,13 @@ On the **LOBBY** server:
 | `SUM` | Adds values from each round together | "Total kills across all rounds" |
 | `MAX` | Keeps the highest value from any single round | "Best score in any single round" |
 
-Each stat field (kills, deaths, assists, score) is merged independently.
+Each stat field is merged independently according to the configured mode.
 
 ## Database Schema
 
-### SQL (PostgreSQL / MySQL)
+### SQL (PostgreSQL / MySQL) — EAV Schema
+
+Stat fields are stored in a flexible key-value table, so adding new fields requires no schema changes.
 
 ```sql
 CREATE TABLE game_statistics (
@@ -196,13 +238,27 @@ CREATE TABLE player_match_statistics (
     id SERIAL PRIMARY KEY,
     match_id VARCHAR(64) NOT NULL,
     player_name VARCHAR(64) NOT NULL,
-    player_uuid VARCHAR(64),
-    kills INT NOT NULL DEFAULT 0,
-    deaths INT NOT NULL DEFAULT 0,
-    assists INT NOT NULL DEFAULT 0,
-    score INT NOT NULL DEFAULT 0
+    player_uuid VARCHAR(64)
+);
+
+CREATE TABLE player_stat_fields (
+    id SERIAL PRIMARY KEY,
+    player_stat_id INT NOT NULL,
+    field_name VARCHAR(64) NOT NULL,
+    field_value INT NOT NULL DEFAULT 0
 );
 ```
+
+Example data in `player_stat_fields`:
+
+| player_stat_id | field_name | field_value |
+|---|---|---|
+| 1 | kills | 5 |
+| 1 | deaths | 2 |
+| 1 | damage | 300 |
+| 2 | kills | 3 |
+| 2 | deaths | 4 |
+| 2 | damage | 150 |
 
 ### MongoDB
 
@@ -216,7 +272,11 @@ Collection: `game_statistics`
     "player_count": 8,
     "timestamp": 1234567890,
     "players": [
-        { "player_name": "Steve", "player_uuid": "...", "kills": 5, "deaths": 2, "assists": 3, "score": 100 }
+        {
+            "player_name": "Steve",
+            "player_uuid": "...",
+            "stats": { "kills": 5, "deaths": 2, "damage": 300 }
+        }
     ]
 }
 ```
@@ -229,7 +289,7 @@ Collection: `game_statistics`
 mvn clean package -DskipTests
 ```
 
-Output: `target/MiniGamePlugin-1.1.0.jar`
+Output: `target/MiniGamePlugin-1.2.0.jar`
 
 ### Deploy
 
@@ -238,10 +298,10 @@ Place the same JAR into both **Game** and **Lobby** templates:
 ```
 CloudNet/local/templates/
 ├── Lobby/default/plugins/
-│   ├── MiniGamePlugin-1.1.0.jar
+│   ├── MiniGamePlugin-1.2.0.jar
 │   └── DecentHolograms-x.x.x.jar       ← lobby only
 └── SkyWars/default/plugins/
-    └── MiniGamePlugin-1.1.0.jar
+    └── MiniGamePlugin-1.2.0.jar
 ```
 
 - **Database drivers** (PostgreSQL, MySQL, MongoDB) are shaded into the JAR — no extra files needed.
@@ -259,11 +319,13 @@ proxy-service: "Proxy-1"
 scoreboard:
   enabled: true
   merge-mode: "SUM"
+  sort-by: "score"
   objectives:
     kills: "game_kills"
     deaths: "game_deaths"
     assists: "game_assists"
     score: "game_score"
+    damage: "game_damage"
 ```
 
 **Lobby server** (`config.yml`):
@@ -283,6 +345,7 @@ hologram-locations:
     x: 0.5
     y: 65.0
     z: 0.5
+hologram-player-line: "&f{player_name}  &cK:{kills} &4D:{deaths} &6DMG:{damage} &bS:{score}"
 ```
 
 ### Database Preparation
@@ -293,7 +356,7 @@ hologram-locations:
 ## Running Unit Tests
 
 ```bash
-# Run all 30 tests
+# Run all 39 tests
 mvn test
 
 # Run only model tests
@@ -318,29 +381,42 @@ mvn test -Dtest="ScoreboardTrackerTest"
 [Game Server]                    [CloudNet]                [Lobby Server]
      |                               |                          |
   Scoreboard auto-tracks data        |                          |
+  (any number of custom fields)      |                          |
      |                               |                          |
   /savescoreboard (per round)        |                          |
      |                               |                          |
   /gameend Steve                     |                          |
      |── ChannelMessage ──────────>  |  ──────────────────>     |
-     |   (stats + player data)       |                     Receive stats
-     |                               |                          |── Save to DB (async)
+     |   (dynamic field key-value)   |                     Receive stats
+     |                               |                          |── Save to DB (async, EAV)
      |<── send command (delayed) ── Proxy                       |── Create holograms
   Players teleported to Lobby        |                          |── Broadcast chat
 ```
 
 ## Version History
 
+### v1.2.0
+
+- **Dynamic stat fields** — no longer limited to kills/deaths/assists/score; add any number of fields in `config.yml`
+- `PlayerMatchStatistic` refactored to use `Map<String, Integer>` internally (backward-compatible constructors preserved)
+- `ScoreboardTracker` reads arbitrary objectives from config
+- New `sort-by` config option to control hologram player sorting
+- `/gameend` command supports new `field=value` format: `Steve:uuid:kills=5:damage=300`
+- Hologram `{placeholder}` system now dynamically replaces any field name
+- SQL database switched to EAV schema (`player_stat_fields` table) — no schema changes needed for new fields
+- MongoDB stores stats as nested document per player
+- CloudNet ChannelMessage serializes dynamic key-value pairs
+- 39 unit tests covering dynamic fields, merge logic, and backward compatibility
+
 ### v1.1.0
 
-- Added vanilla scoreboard integration — auto-read `kills`, `deaths`, `assists`, `score` from configurable objectives
+- Added vanilla scoreboard integration — auto-read stats from configurable objectives
 - Added `/savescoreboard` command for multi-round data snapshots
 - Added `merge-mode` config: `SUM` (accumulate) or `MAX` (best round)
 - `/gameend` now auto-attaches scoreboard data when no manual stats given
 - Added multi-database support: PostgreSQL, MySQL/MariaDB, MongoDB
 - Added configurable multi-location hologram display with per-player stats
 - Added public Java API (`GameEndAPI`) for external plugin integration
-- 30 unit tests covering models, commands, database manager, and scoreboard tracker
 
 ### v1.0.0
 
