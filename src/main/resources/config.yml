@@ -27,7 +27,11 @@ scoreboard:
   #   SUM  - add values from each round together (e.g. total kills across all rounds)
   #   MAX  - keep the highest value from any single round (e.g. best score in any round)
   merge-mode: "SUM"
+  # Which field to sort players by in hologram display (descending). Optional.
+  # If not set, the first field in objectives is used.
+  sort-by: "score"
   # Map each stat field to a vanilla scoreboard objective name.
+  # You can add ANY number of fields here — they will all be tracked, saved, and displayed.
   # Set to "" or remove the line to skip that stat.
   # These objective names must match the ones your minigame plugin creates.
   # Example: if your game uses "/scoreboard objectives add game_kills dummy"
@@ -36,6 +40,10 @@ scoreboard:
     deaths: "game_deaths"
     assists: "game_assists"
     score: "game_score"
+    # Add more fields as needed, for example:
+    # damage: "game_damage"
+    # heals: "game_heals"
+    # blocks_placed: "game_blocks"
 
 # ===== Database Configuration (used in LOBBY mode) =====
 database:
@@ -61,10 +69,11 @@ hologram-locations:
 
 # Hologram display format - you can customize which lines appear
 # Available placeholders:
-#   {game_name}, {winner}, {player_count}, {match_id}, {duration}
-#   Per-player lines use {player_name}, {kills}, {deaths}, {assists}, {score}
+#   Header/Footer: {game_name}, {winner}, {player_count}, {match_id}, {duration}
+#   Per-player line: {player_name} and any field name from objectives wrapped in {}
+#     e.g. {kills}, {deaths}, {assists}, {score}, {damage}, {heals}, etc.
 hologram-header:
-  - "&6&l\u2605 Game Over \u2605"
+  - "&6&l★ Game Over ★"
   - "&eServer: &f{game_name}"
   - "&aWinner: &f{winner}"
   - "&bPlayers: &f{player_count}"

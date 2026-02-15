@@ -24,7 +24,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class MiniGameStatistic extends JavaPlugin {
 
@@ -61,7 +63,6 @@ public final class MiniGameStatistic extends JavaPlugin {
                     getCommand("savescoreboard").setExecutor(new SaveScoreboardCommand(this));
                 }
             } else if ("LOBBY".equals(mode)) {
-                // Initialize database on lobby side
                 initializeDatabase();
                 registerChannelMessageListener();
             }
@@ -96,12 +97,10 @@ public final class MiniGameStatistic extends JavaPlugin {
     //  Game End (called on GAME servers)
     // ----------------------------------------------------------------
 
-    /** Simple overload kept for backward compatibility. */
     public void handleGameEnd(String winner, int playerCount) {
         handleGameEnd(winner, playerCount, null);
     }
 
-    /** Full game-end handler with optional per-player stats. */
     public void handleGameEnd(String winner, int playerCount, List<PlayerMatchStatistic> playerStats) {
         if (!"GAME".equals(mode)) return;
 
@@ -121,9 +120,7 @@ public final class MiniGameStatistic extends JavaPlugin {
 
         final GameStatistic finalStat = statistic;
 
-        // Teleport players back to lobby after delay
         Bukkit.getScheduler().runTaskLater(this, this::teleportPlayersToLobby, teleportDelay * 20L);
-        // Send stats to lobby via CloudNet channel message
         sendStatisticsToLobby(finalStat);
     }
 
@@ -143,7 +140,7 @@ public final class MiniGameStatistic extends JavaPlugin {
     }
 
     // ----------------------------------------------------------------
-    //  CloudNet Channel Message (GAME -> LOBBY)
+    //  CloudNet Channel Message (GAME -> LOBBY) — dynamic fields
     // ----------------------------------------------------------------
 
     private void sendStatisticsToLobby(GameStatistic statistic) {
@@ -157,16 +154,19 @@ public final class MiniGameStatistic extends JavaPlugin {
                     .writeInt(statistic.getPlayerCount())
                     .writeLong(statistic.getTimestamp());
 
-            // Write player stats
+            // Write player stats with dynamic fields
             List<PlayerMatchStatistic> players = statistic.getPlayerStatistics();
             buf.writeInt(players.size());
             for (PlayerMatchStatistic p : players) {
                 buf.writeString(p.getPlayerName());
                 buf.writeString(p.getPlayerUUID() != null ? p.getPlayerUUID() : "");
-                buf.writeInt(p.getKills());
-                buf.writeInt(p.getDeaths());
-                buf.writeInt(p.getAssists());
-                buf.writeInt(p.getScore());
+                // Write dynamic stat fields as count + (key, value) pairs
+                Map<String, Integer> stats = p.getStats();
+                buf.writeInt(stats.size());
+                for (Map.Entry<String, Integer> entry : stats.entrySet()) {
+                    buf.writeString(entry.getKey());
+                    buf.writeInt(entry.getValue());
+                }
             }
 
             ChannelMessage.builder()
@@ -203,14 +203,14 @@ public final class MiniGameStatistic extends JavaPlugin {
                     int playerStatsCount = content.readInt();
                     List<PlayerMatchStatistic> players = new ArrayList<>();
                     for (int i = 0; i < playerStatsCount; i++) {
-                        players.add(new PlayerMatchStatistic(
-                                content.readString(),
-                                content.readString(),
-                                content.readInt(),
-                                content.readInt(),
-                                content.readInt(),
-                                content.readInt()
-                        ));
+                        String pName = content.readString();
+                        String pUuid = content.readString();
+                        int fieldCount = content.readInt();
+                        Map<String, Integer> stats = new LinkedHashMap<>();
+                        for (int j = 0; j < fieldCount; j++) {
+                            stats.put(content.readString(), content.readInt());
+                        }
+                        players.add(new PlayerMatchStatistic(pName, pUuid, stats));
                     }
 
                     GameStatistic statistic = new GameStatistic(matchId, gameName, winner, playerCount, timestamp, players);
@@ -230,7 +230,6 @@ public final class MiniGameStatistic extends JavaPlugin {
     private void onStatisticsReceived(GameStatistic statistic) {
         getLogger().info("Received statistics: " + statistic);
 
-        // 1. Save to database (async)
         if (DatabaseManager.getInstance().isEnabled()) {
             Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
                 try {
@@ -243,15 +242,12 @@ public final class MiniGameStatistic extends JavaPlugin {
             });
         }
 
-        // 2. Display hologram(s)
         displayStatisticsHolograms(statistic);
-
-        // 3. Broadcast chat message
         Bukkit.broadcastMessage("\u00a76\u00a7l[Game Stats] \u00a7eMatch finished! Check the hologram for details.");
     }
 
     // ----------------------------------------------------------------
-    //  Hologram display (multi-location, configurable lines)
+    //  Hologram display (multi-location, dynamic field placeholders)
     // ----------------------------------------------------------------
 
     private void clearOldHolograms() {
@@ -265,7 +261,6 @@ public final class MiniGameStatistic extends JavaPlugin {
     private List<Location> getHologramLocations() {
         List<Location> locations = new ArrayList<>();
 
-        // New multi-location format
         if (getConfig().contains("hologram-locations")) {
             List<?> list = getConfig().getList("hologram-locations");
             if (list != null) {
@@ -285,7 +280,6 @@ public final class MiniGameStatistic extends JavaPlugin {
             }
         }
 
-        // Legacy single-location fallback
         if (locations.isEmpty() && getConfig().contains("hologram-location")) {
             String worldName = getConfig().getString("hologram-location.world", "world");
             double x = getConfig().getDouble("hologram-location.x");
@@ -311,7 +305,6 @@ public final class MiniGameStatistic extends JavaPlugin {
             return;
         }
 
-        // Build hologram lines from config templates
         List<String> lines = buildHologramLines(statistic);
 
         int idx = 0;
@@ -322,7 +315,6 @@ public final class MiniGameStatistic extends JavaPlugin {
             holoNames.add(holoName);
         }
 
-        // Auto-remove after duration
         if (duration > 0) {
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 for (String name : holoNames) {
@@ -351,7 +343,7 @@ public final class MiniGameStatistic extends JavaPlugin {
             lines.add(replacePlaceholders(tmpl, statistic));
         }
 
-        // Per-player lines
+        // Per-player lines — dynamic field placeholders
         String playerTemplate = getConfig().getString("hologram-player-line",
                 "&f{player_name}  &cK:{kills} &4D:{deaths} &eA:{assists} &bS:{score}");
         for (PlayerMatchStatistic p : statistic.getPlayerStatistics()) {
@@ -364,7 +356,6 @@ public final class MiniGameStatistic extends JavaPlugin {
             lines.add(replacePlaceholders(tmpl, statistic));
         }
 
-        // Translate color codes
         lines.replaceAll(line -> line.replace('&', '\u00a7'));
         return lines;
     }
@@ -378,13 +369,17 @@ public final class MiniGameStatistic extends JavaPlugin {
                 .replace("{duration}", String.valueOf(getConfig().getInt("hologram-duration", 30)));
     }
 
+    /**
+     * Replace player placeholders dynamically: {player_name} plus any stat field
+     * like {kills}, {deaths}, {damage}, etc.
+     */
     private String replacePlayerPlaceholders(String template, PlayerMatchStatistic p) {
-        return template
-                .replace("{player_name}", p.getPlayerName())
-                .replace("{kills}", String.valueOf(p.getKills()))
-                .replace("{deaths}", String.valueOf(p.getDeaths()))
-                .replace("{assists}", String.valueOf(p.getAssists()))
-                .replace("{score}", String.valueOf(p.getScore()));
+        String result = template.replace("{player_name}", p.getPlayerName());
+        // Replace all dynamic stat field placeholders
+        for (Map.Entry<String, Integer> entry : p.getStats().entrySet()) {
+            result = result.replace("{" + entry.getKey() + "}", String.valueOf(entry.getValue()));
+        }
+        return result;
     }
 
     private static double toDouble(Object obj) {

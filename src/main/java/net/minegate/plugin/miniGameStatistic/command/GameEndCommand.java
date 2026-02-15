@@ -10,13 +10,18 @@ import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Command to trigger game end.
  *
  * <p>Usage:
- *   /gameend &lt;winner&gt; [playerCount] [player:uuid:kills:deaths:assists:score ...]
+ *   /gameend &lt;winner&gt; [playerCount] [player:uuid:field1=val1:field2=val2 ...]
+ *
+ * <p>Example:
+ *   /gameend Steve 8 Steve:uuid1:kills=5:deaths=2:score=100 Alex:uuid2:kills=3:deaths=4:score=60
  *
  * <p>Behavior:
  * <ul>
@@ -42,7 +47,7 @@ public class GameEndCommand implements CommandExecutor {
         }
 
         if (args.length < 1) {
-            sender.sendMessage("\u00a7cUsage: /gameend <winner> [playerCount] [player:uuid:kills:deaths:assists:score ...]");
+            sender.sendMessage("\u00a7cUsage: /gameend <winner> [playerCount] [player:uuid:field=val:field=val ...]");
             return true;
         }
 
@@ -74,7 +79,6 @@ public class GameEndCommand implements CommandExecutor {
         if (playerStats.isEmpty()) {
             ScoreboardTracker tracker = plugin.getScoreboardTracker();
             if (tracker != null && tracker.isEnabled()) {
-                // Take a final snapshot to capture the latest scoreboard state
                 int snapped = tracker.snapshotCurrentScoreboard();
                 if (tracker.hasData()) {
                     playerStats = tracker.buildStatistics();
@@ -82,7 +86,6 @@ public class GameEndCommand implements CommandExecutor {
                             + playerStats.size() + "\u00a7a players (final snapshot: "
                             + snapped + ", mode: " + tracker.getMergeMode() + ").");
                 }
-                // Clear accumulated data for next game session
                 tracker.clear();
             }
         }
@@ -96,19 +99,36 @@ public class GameEndCommand implements CommandExecutor {
     }
 
     /**
-     * Parse "PlayerName:UUID:kills:deaths:assists:score"
+     * Parse "PlayerName:UUID:field1=val1:field2=val2:..."
+     * Also supports legacy format "PlayerName:UUID:kills:deaths:assists:score"
      */
     static PlayerMatchStatistic parsePlayerStat(String raw) {
         String[] parts = raw.split(":");
-        if (parts.length < 6) return null;
+        if (parts.length < 3) return null;
         try {
-            return new PlayerMatchStatistic(
-                    parts[0], parts[1],
-                    Integer.parseInt(parts[2]),
-                    Integer.parseInt(parts[3]),
-                    Integer.parseInt(parts[4]),
-                    Integer.parseInt(parts[5])
-            );
+            String name = parts[0];
+            String uuid = parts[1];
+
+            // Check if new key=value format or legacy positional format
+            if (parts.length >= 3 && parts[2].contains("=")) {
+                // New format: field=value pairs
+                Map<String, Integer> stats = new LinkedHashMap<>();
+                for (int i = 2; i < parts.length; i++) {
+                    String[] kv = parts[i].split("=", 2);
+                    if (kv.length == 2) {
+                        stats.put(kv[0], Integer.parseInt(kv[1]));
+                    }
+                }
+                return new PlayerMatchStatistic(name, uuid, stats);
+            } else if (parts.length >= 6) {
+                // Legacy format: name:uuid:kills:deaths:assists:score
+                return new PlayerMatchStatistic(name, uuid,
+                        Integer.parseInt(parts[2]),
+                        Integer.parseInt(parts[3]),
+                        Integer.parseInt(parts[4]),
+                        Integer.parseInt(parts[5]));
+            }
+            return null;
         } catch (NumberFormatException e) {
             return null;
         }
