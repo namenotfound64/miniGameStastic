@@ -11,10 +11,12 @@ import eu.decentsoftware.holograms.api.DHAPI;
 import eu.decentsoftware.holograms.api.DecentHologramsAPI;
 import net.minegate.plugin.miniGameStatistic.api.CloudNetAPI;
 import net.minegate.plugin.miniGameStatistic.command.GameEndCommand;
+import net.minegate.plugin.miniGameStatistic.command.SaveScoreboardCommand;
 import net.minegate.plugin.miniGameStatistic.database.DatabaseManager;
 import net.minegate.plugin.miniGameStatistic.listener.GameEndListener;
 import net.minegate.plugin.miniGameStatistic.model.GameStatistic;
 import net.minegate.plugin.miniGameStatistic.model.PlayerMatchStatistic;
+import net.minegate.plugin.miniGameStatistic.scoreboard.ScoreboardTracker;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.configuration.ConfigurationSection;
@@ -31,6 +33,7 @@ public final class MiniGameStatistic extends JavaPlugin {
     private String proxyService;
     private int teleportDelay;
     private GameEndListener gameEndListener;
+    private ScoreboardTracker scoreboardTracker;
 
     @Override
     public void onEnable() {
@@ -50,6 +53,13 @@ public final class MiniGameStatistic extends JavaPlugin {
                 gameEndListener = new GameEndListener(this);
                 getServer().getPluginManager().registerEvents(gameEndListener, this);
                 getCommand("gameend").setExecutor(new GameEndCommand(this));
+
+                // Initialize scoreboard tracker
+                scoreboardTracker = new ScoreboardTracker();
+                scoreboardTracker.loadConfig(getConfig().getConfigurationSection("scoreboard"), getLogger());
+                if (scoreboardTracker.isEnabled()) {
+                    getCommand("savescoreboard").setExecutor(new SaveScoreboardCommand(this));
+                }
             } else if ("LOBBY".equals(mode)) {
                 // Initialize database on lobby side
                 initializeDatabase();
@@ -385,5 +395,9 @@ public final class MiniGameStatistic extends JavaPlugin {
 
     public GameEndListener getGameEndListener() {
         return gameEndListener;
+    }
+
+    public ScoreboardTracker getScoreboardTracker() {
+        return scoreboardTracker;
     }
 }

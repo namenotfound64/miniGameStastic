@@ -1,5 +1,5 @@
 name: MiniGameStatistic
-version: '1.0-SNAPSHOT'
+version: '1.1.0'
 main: net.minegate.plugin.miniGameStatistic.MiniGameStatistic
 api-version: '1.20'
 description: 'CloudNet v4 plugin for minigame statistics, database persistence, player teleportation, and hologram display'
@@ -12,12 +12,20 @@ softdepend: []
 
 commands:
   gameend:
-    description: 'Manually trigger game end event with optional player statistics'
+    description: 'Trigger game end. Auto-attaches scoreboard data if no manual stats given.'
     usage: '/gameend <winner> [playerCount] [player:uuid:kills:deaths:assists:score ...]'
     permission: minigamestatistic.gameend
+    permission-message: 'You do not have permission to use this command'
+  savescoreboard:
+    description: 'Snapshot current scoreboard data for all online players (call after each round)'
+    usage: '/savescoreboard'
+    permission: minigamestatistic.savescoreboard
     permission-message: 'You do not have permission to use this command'
 
 permissions:
   minigamestatistic.gameend:
     description: 'Allows triggering manual game end'
+    default: op
+  minigamestatistic.savescoreboard:
+    description: 'Allows saving scoreboard snapshots'
     default: op

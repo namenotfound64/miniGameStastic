@@ -17,6 +17,26 @@ teleport-delay: 5
 # Game server name (used in GAME mode, auto-detected if "auto")
 game-server-name: "auto"
 
+# ===== Scoreboard Tracking (used in GAME mode) =====
+# Reads vanilla Minecraft scoreboard objectives to automatically collect player stats.
+# Use /savescoreboard after each round to snapshot data, then /gameend to send.
+# If scoreboard is enabled, /gameend will auto-attach the data (no manual stats needed).
+scoreboard:
+  enabled: true
+  # How to merge data across multiple rounds on the same server:
+  #   SUM  - add values from each round together (e.g. total kills across all rounds)
+  #   MAX  - keep the highest value from any single round (e.g. best score in any round)
+  merge-mode: "SUM"
+  # Map each stat field to a vanilla scoreboard objective name.
+  # Set to "" or remove the line to skip that stat.
+  # These objective names must match the ones your minigame plugin creates.
+  # Example: if your game uses "/scoreboard objectives add game_kills dummy"
+  objectives:
+    kills: "game_kills"
+    deaths: "game_deaths"
+    assists: "game_assists"
+    score: "game_score"
+
 # ===== Database Configuration (used in LOBBY mode) =====
 database:
   enabled: false

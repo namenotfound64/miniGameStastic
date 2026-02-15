@@ -2,26 +2,29 @@ package net.minegate.plugin.miniGameStatistic.command;
 
 import net.minegate.plugin.miniGameStatistic.MiniGameStatistic;
 import net.minegate.plugin.miniGameStatistic.model.PlayerMatchStatistic;
+import net.minegate.plugin.miniGameStatistic.scoreboard.ScoreboardTracker;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Command to manually trigger game end (useful for testing and external integrations).
- * <p>
- * Usage:
+ * Command to trigger game end.
+ *
+ * <p>Usage:
  *   /gameend &lt;winner&gt; [playerCount] [player:uuid:kills:deaths:assists:score ...]
- * <p>
- * Examples:
- *   /gameend Steve                             -- simple, auto player count
- *   /gameend Steve 8                           -- with explicit player count
- *   /gameend Steve 2 Steve:uuid1:5:2:3:100 Alex:uuid2:3:4:1:60
+ *
+ * <p>Behavior:
+ * <ul>
+ *   <li>If manual player stats are provided on the command line, those are used.</li>
+ *   <li>Otherwise, if scoreboard tracking is enabled, a final snapshot is taken
+ *       and the accumulated scoreboard data is attached automatically.</li>
+ *   <li>After sending, the scoreboard tracker is cleared for the next session.</li>
+ * </ul>
  */
 public class GameEndCommand implements CommandExecutor {
     private final MiniGameStatistic plugin;
@@ -56,7 +59,7 @@ public class GameEndCommand implements CommandExecutor {
             }
         }
 
-        // Parse optional per-player stats
+        // Parse optional per-player stats from command line
         List<PlayerMatchStatistic> playerStats = new ArrayList<>();
         for (int i = statsStartIndex; i < args.length; i++) {
             PlayerMatchStatistic stat = parsePlayerStat(args[i]);
@@ -64,6 +67,23 @@ public class GameEndCommand implements CommandExecutor {
                 playerStats.add(stat);
             } else {
                 sender.sendMessage("\u00a7eWarning: Skipped malformed stat entry: " + args[i]);
+            }
+        }
+
+        // If no manual stats provided, try scoreboard tracker
+        if (playerStats.isEmpty()) {
+            ScoreboardTracker tracker = plugin.getScoreboardTracker();
+            if (tracker != null && tracker.isEnabled()) {
+                // Take a final snapshot to capture the latest scoreboard state
+                int snapped = tracker.snapshotCurrentScoreboard();
+                if (tracker.hasData()) {
+                    playerStats = tracker.buildStatistics();
+                    sender.sendMessage("\u00a7aAuto-attached scoreboard data for \u00a7f"
+                            + playerStats.size() + "\u00a7a players (final snapshot: "
+                            + snapped + ", mode: " + tracker.getMergeMode() + ").");
+                }
+                // Clear accumulated data for next game session
+                tracker.clear();
             }
         }
 
